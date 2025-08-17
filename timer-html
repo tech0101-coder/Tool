@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Writing Drill - Simple focus timer with 60-minute cycle tracking that resets daily">
+    <title>Writing Drill - Simple Focus Timer</title>
+    
+    <!-- External Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary-bg: #ffffff;
+            --secondary-bg: #f8fafc;
+            --primary-text: #1a202c;
+            --secondary-text: #4a5568;
+            --accent-color: #2d3748;
+            --border-color: #e2e8f0;
+            --success-color: #48bb78;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --button-bg: #ffffff;
+            --button-text: #4a5568;
+            --button-hover-bg: #f7fafc;
+            --input-bg: #ffffff;
+            --card-bg: #ffffff;
+        }
+        
+        [data-theme="dark"] {
+            --primary-bg: #1a202c;
+            --secondary-bg: #2d3748;
+            --primary-text: #f7fafc;
+            --secondary-text: #cbd5e0;
+            --accent-color: #718096;
+            --border-color: #4a5568;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            --button-bg: #2d3748;
+            --button-text: #f7fafc;
+            --button-hover-bg: #4a5568;
+            --input-bg: #2d3748;
+            --card-bg: #2d3748;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background-color: var(--primary-bg);
+            color: var(--primary-text);
+            transition: all 0.3s ease;
+            min-height: 100vh;
+        }
+        
+        [data-theme="light"] body {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%);
+        }
+        
+        [data-theme="dark"] body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+        
+        .main-container {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .timer-circle {
+            stroke: var(--accent-color);
+            stroke-dasharray: 628;
+            stroke-dashoffset: 628;
+            transition: stroke-dashoffset 0.1s linear;
+        }
+        
+        .timer-circle-bg {
+            stroke: var(--border-color);
+        }
+        
+        .theme-button {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            transition: all 0.3s ease;
+        }
+        
+        .theme-button:hover {
+            background-color: var(--button-hover-bg);
+        }
+        
+        .timer-display {
+            font-family: 'Courier New', monospace;
+            font-weight: 700;
+            letter-spacing: -2px;
+            color: var(--primary-text);
+        }
+        
+        .cycle-complete {
+            animation: pulse 0.8s ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        
+        .cycle-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .new-day-badge {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            animation: newDayPulse 2s ease-in-out;
+        }
+
+        @keyframes newDayPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+    </style>
+</head>
+<body data-theme="light">
+    
+    <!-- Notification Area -->
+    <div id="notification-area"></div>
+
+    <!-- Theme Toggle -->
+    <div class="fixed top-4 right-4 z-50 flex space-x-2">
+        <button id="sound-toggle" class="p-3 rounded-full theme-button shadow-lg hover:shadow-xl transition-all duration-200">
+            <i class="fas fa-volume-up text-lg"></i>
+        </button>
+        <button id="theme-toggle" class="p-3 rounded-full theme-button shadow-lg hover:shadow-xl transition-all duration-200">
+            <i class="fas fa-moon text-lg"></i>
+        </button>
+    </div>
+
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4" style="color: var(--primary-text)">Writing Drill</h1>
+            <p class="text-lg max-w-2xl mx-auto mb-6" style="color: var(--secondary-text)">Simple focus timer with daily cycle reset</p>
+            <div id="new-day-indicator" class="hidden">
+                <span class="new-day-badge">🌅 New Day, Fresh Start!</span>
+            </div>
+        </header>
+
+        <!-- Main Timer Section -->
+        <div class="main-container rounded-2xl p-8 shadow-xl mb-8">
+            
+            <!-- Time Options -->
+            <div class="grid grid-cols-3 md:grid-cols-6 gap-3 mb-8">
+                <button class="time-btn theme-button border-2 hover:bg-gray-800 hover:text-white transition-all py-3 px-4 rounded-lg font-semibold text-sm" style="border-color: var(--border-color)" data-minutes="2">2 min</button>
+                <button class="time-btn theme-button border-2 hover:bg-gray-800 hover:text-white transition-all py-3 px-4 rounded-lg font-semibold text-sm" style="border-color: var(--border-color)" data-minutes="5">5 min</button>
+                <button class="time-btn theme-button border-2 hover:bg-gray-800 hover:text-white transition-all py-3 px-4 rounded-lg font-semibold text-sm" style="border-color: var(--border-color)" data-minutes="15">15 min</button>
+                <button class="time-btn theme-button border-2 hover:bg-gray-800 hover:text-white transition-all py-3 px-4 rounded-lg font-semibold text-sm" style="border-color: var(--border-color)" data-minutes="25">25 min</button>
+                <button class="time-btn theme-button border-2 hover:bg-gray-800 hover:text-white transition-all py-3 px-4 rounded-lg font-semibold text-sm" style="border-color: var(--border-color)" data-minutes="30">30 min</button>
+                <button class="time-btn theme-button border-2 hover:bg-gray-800 hover:text-white transition-all py-3 px-4 rounded-lg font-semibold text-sm" style="border-color: var(--border-color)" data-minutes="45">45 min</button>
+            </div>
+
+            <!-- Custom Time Input -->
+            <div class="flex justify-center mb-8">
+                <div class="flex items-center space-x-2">
+                    <label for="custom-minutes" class="text-sm font-medium" style="color: var(--primary-text)">Custom:</label>
+                    <input type="number" id="custom-minutes" min="1" max="120" placeholder="min" class="w-16 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-center theme-button" style="border-color: var(--border-color); background-color: var(--button-bg);">
+                    <button id="set-custom-time" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm">Set</button>
+                </div>
+            </div>
+
+            <!-- Timer Display -->
+            <div class="text-center mb-8">
+                <div class="relative inline-block">
+                    <svg class="w-48 h-48 progress-ring" viewBox="0 0 100 100">
+                        <circle class="timer-circle-bg" cx="50" cy="50" r="45" fill="none" stroke-width="3"/>
+                        <circle class="timer-circle" cx="50" cy="50" r="45" fill="none" stroke-width="3" stroke-linecap="round"/>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <div class="timer-display text-4xl" id="timer-display">00:00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Buttons -->
+            <div class="flex justify-center space-x-4">
+                <button id="start-btn" class="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-play mr-2"></i>Start
+                </button>
+                <button id="pause-btn" class="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-pause mr-2"></i>Pause
+                </button>
+                <button id="reset-btn" class="px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-stop mr-2"></i>Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- Current 60-Minute Cycle -->
+            <div class="main-container rounded-xl p-6 shadow-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold flex items-center" style="color: var(--primary-text)">
+                        <i class="fas fa-clock mr-2 text-blue-500"></i>Today's Cycle
+                    </h3>
+                    <div class="flex items-center space-x-2">
+                        <div class="cycle-badge">
+                            <i class="fas fa-refresh"></i>
+                            <span>Cycle <span id="current-cycle">1</span></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-medium" style="color: var(--primary-text)">Progress</span>
+                        <span class="text-sm font-semibold" id="cycle-progress-text" style="color: var(--secondary-text)">0 / 60 min</span>
+                    </div>
+                    <div class="w-full rounded-full h-3" style="background-color: var(--border-color)">
+                        <div class="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500" id="cycle-progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="text-center">
+                        <span class="text-2xl font-bold" id="cycle-remaining" style="color: var(--primary-text)">60 min remaining</span>
+                    </div>
+                    <div class="text-center text-xs" style="color: var(--secondary-text)">
+                        <span id="current-date"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Total Statistics -->
+            <div class="main-container rounded-xl p-6 shadow-lg">
+                <h3 class="text-lg font-bold mb-4 flex items-center" style="color: var(--primary-text)">
+                    <i class="fas fa-chart-line mr-2 text-green-500"></i>Total Statistics
+                </h3>
+                
+                <div class="space-y-4">
+                    <div class="text-center p-4 rounded-lg" style="background-color: var(--secondary-bg)">
+                        <div class="text-3xl font-bold mb-1" id="total-time" style="color: var(--primary-text)">0h 0m</div>
+                        <div class="text-sm" style="color: var(--secondary-text)">Total Writing Time</div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 text-center">
+                        <div>
+                            <div class="text-xl font-bold" id="completed-cycles" style="color: var(--primary-text)">0</div>
+                            <div class="text-xs" style="color: var(--secondary-text)">Completed Cycles</div>
+                        </div>
+                        <div>
+                            <div class="text-xl font-bold" id="total-sessions" style="color: var(--primary-text)">0</div>
+                            <div class="text-xs" style="color: var(--secondary-text)">Total Sessions</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SimpleWritingDrill {
+            constructor() {
+                this.timer = null;
+                this.timeLeft = 0;
+                this.totalSeconds = 0;
+                this.isRunning = false;
+                this.isPaused = false;
+                this.soundEnabled = true;
+                this.audioContext = null;
+                
+                // Accurate timing variables
+                this.startTime = null;
+                this.endTime = null;
+                this.pausedTime = 0;
+                this.pauseStartTime = null;
+                
+                this.initializeElements();
+                this.initializeData();
+                this.initializeEventListeners();
+                this.updateDisplay();
+                this.initializeAudio();
+                this.updateCurrentDate();
+                this.setupVisibilityHandler();
+            }
+
+            initializeElements() {
+                // Timer elements
+                this.timerDisplay = document.getElementById('timer-display');
+                this.timerCircle = document.querySelector('.timer-circle');
+                this.startBtn = document.getElementById('start-btn');
+                this.pauseBtn = document.getElementById('pause-btn');
+                this.resetBtn = document.getElementById('reset-btn');
+                this.timeBtns = document.querySelectorAll('.time-btn');
+                this.customMinutesInput = document.getElementById('custom-minutes');
+                this.setCustomTimeBtn = document.getElementById('set-custom-time');
+                
+                // Controls
+                this.soundToggle = document.getElementById('sound-toggle');
+                this.themeToggle = document.getElementById('theme-toggle');
+                
+                // Progress elements
+                this.cycleProgressBar = document.getElementById('cycle-progress-bar');
+                this.cycleProgressText = document.getElementById('cycle-progress-text');
+                this.cycleRemaining = document.getElementById('cycle-remaining');
+                this.currentCycle = document.getElementById('current-cycle');
+                this.currentDate = document.getElementById('current-date');
+                this.newDayIndicator = document.getElementById('new-day-indicator');
+                
+                // Stats elements
+                this.totalTime = document.getElementById('total-time');
+                this.completedCycles = document.getElementById('completed-cycles');
+                this.totalSessions = document.getElementById('total-sessions');
+                
+                this.notificationArea = document.getElementById('notification-area');
+            }
+
+            initializeData() {
+                // Get current date
+                const today = new Date().toDateString();
+                
+                // Load data from localStorage
+                this.stats = JSON.parse(localStorage.getItem('simpleWritingStats')) || {
+                    totalMinutes: 0,
+                    currentCycleMinutes: 0,
+                    completedCycles: 0,
+                    totalSessions: 0,
+                    currentCycleNumber: 1,
+                    lastDate: today
+                };
+                
+                // Check if it's a new day
+                if (this.stats.lastDate !== today) {
+                    this.handleNewDay(today);
+                }
+                
+                // Load theme
+                const theme = localStorage.getItem('writingDrillTheme') || 'light';
+                document.body.setAttribute('data-theme', theme);
+                this.updateThemeIcon(theme);
+                
+                // Load sound preference
+                this.soundEnabled = localStorage.getItem('writingDrillSound') !== 'false';
+                this.updateSoundIcon();
+            }
+
+            setupVisibilityHandler() {
+                // Handle page visibility changes to keep timer accurate
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden && this.isRunning && !this.isPaused) {
+                        // Page became visible, sync timer
+                        this.syncTimer();
+                    }
+                });
+            }
+
+            syncTimer() {
+                if (!this.isRunning || this.isPaused || !this.endTime) return;
+
+                const now = Date.now();
+                const remaining = Math.max(0, Math.ceil((this.endTime - now) / 1000));
+                
+                if (remaining !== this.timeLeft) {
+                    this.timeLeft = remaining;
+                    this.updateTimerDisplay();
+                    this.updateTimerCircle();
+                    
+                    if (this.timeLeft <= 0) {
+                        this.timerComplete();
+                    }
+                }
+            }
+
+            handleNewDay(today) {
+                const wasNewDay = this.stats.lastDate !== today && this.stats.lastDate !== undefined;
+                
+                // Reset daily cycle progress
+                this.stats.currentCycleMinutes = 0;
+                this.stats.currentCycleNumber = 1;
+                this.stats.lastDate = today;
+                
+                // Show new day indicator if it was actually a new day (not first time)
+                if (wasNewDay) {
+                    this.showNewDayIndicator();
+                    this.showNotification('🌅 New Day!', 'Your daily writing cycle has been reset. Time for a fresh start!');
+                }
+                
+                this.saveStats();
+            }
+
+            showNewDayIndicator() {
+                this.newDayIndicator.classList.remove('hidden');
+                setTimeout(() => {
+                    this.newDayIndicator.classList.add('hidden');
+                }, 5000);
+            }
+
+            updateCurrentDate() {
+                const today = new Date();
+                const options = { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                };
+                this.currentDate.textContent = today.toLocaleDateString('en-US', options);
+            }
+
+            initializeEventListeners() {
+                // Timer buttons
+                this.timeBtns.forEach(btn => {
+                    btn.addEventListener('click', () => this.setTimer(parseInt(btn.dataset.minutes)));
+                });
+                
+                this.setCustomTimeBtn.addEventListener('click', () => {
+                    const minutes = parseInt(this.customMinutesInput.value);
+                    if (minutes && minutes > 0 && minutes <= 120) {
+                        this.setTimer(minutes);
+                        this.customMinutesInput.value = '';
+                    }
+                });
+                
+                // Control buttons
+                this.startBtn.addEventListener('click', () => this.startTimer());
+                this.pauseBtn.addEventListener('click', () => this.pauseTimer());
+                this.resetBtn.addEventListener('click', () => this.resetTimer());
+                
+                // Settings
+                this.soundToggle.addEventListener('click', () => this.toggleSound());
+                this.themeToggle.addEventListener('click', () => this.toggleTheme());
+                
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !this.startBtn.disabled) {
+                        this.startTimer();
+                    } else if (e.key === ' ' && !this.pauseBtn.disabled) {
+                        e.preventDefault();
+                        this.pauseTimer();
+                    } else if (e.key === 'Escape') {
+                        this.resetTimer();
+                    }
+                });
+
+                // Check for date change every minute
+                setInterval(() => {
+                    const today = new Date().toDateString();
+                    if (this.stats.lastDate !== today) {
+                        this.handleNewDay(today);
+                        this.updateDisplay();
+                        this.updateCurrentDate();
+                    }
+                }, 60000);
+            }
+
+            initializeAudio() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    console.log('Web Audio API not supported');
+                }
+            }
+
+            playSound(frequency = 440, duration = 200, type = 'sine') {
+                if (!this.soundEnabled || !this.audioContext) return;
+                
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                
+                oscillator.frequency.value = frequency;
+                oscillator.type = type;
+                
+                gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration / 1000);
+                
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + duration / 1000);
+            }
+
+            setTimer(minutes) {
+                this.resetTimer();
+                this.totalSeconds = minutes * 60;
+                this.timeLeft = this.totalSeconds;
+                this.updateTimerDisplay();
+                this.updateTimerCircle();
+                this.startBtn.disabled = false;
+                
+                // Update active button
+                this.timeBtns.forEach(btn => {
+                    if (parseInt(btn.dataset.minutes) === minutes) {
+                        btn.style.backgroundColor = '#374151';
+                        btn.style.color = 'white';
+                        btn.style.borderColor = '#374151';
+                    } else {
+                        btn.style.backgroundColor = 'var(--button-bg)';
+                        btn.style.color = 'var(--button-text)';
+                        btn.style.borderColor = 'var(--border-color)';
+                    }
+                });
+            }
+
+            startTimer() {
+                if (this.isRunning) return;
+                
+                this.isRunning = true;
+                this.isPaused = false;
+                
+                // Record precise start time
+                this.startTime = Date.now();
+                this.endTime = this.startTime + (this.timeLeft * 1000);
+                this.pausedTime = 0;
+                
+                this.startBtn.disabled = true;
+                this.pauseBtn.disabled = false;
+                this.resetBtn.disabled = false;
+                
+                this.playSound(800, 100);
+                
+                // Use more frequent updates for smoother display
+                this.timer = setInterval(() => {
+                    const now = Date.now();
+                    const remaining = Math.max(0, Math.ceil((this.endTime - now) / 1000));
+                    
+                    // Only update if time actually changed
+                    if (remaining !== this.timeLeft) {
+                        this.timeLeft = remaining;
+                        this.updateTimerDisplay();
+                        this.updateTimerCircle();
+                    }
+                    
+                    if (this.timeLeft <= 0) {
+                        this.timerComplete();
+                    }
+                }, 100); // Update every 100ms for smoother display
+            }
+
+            pauseTimer() {
+                if (!this.isRunning && !this.isPaused) return;
+                
+                if (this.isPaused) {
+                    // Resume - calculate new end time accounting for pause duration
+                    const pauseDuration = Date.now() - this.pauseStartTime;
+                    this.pausedTime += pauseDuration;
+                    this.endTime += pauseDuration;
+                    
+                    this.isPaused = false;
+                    this.isRunning = true;
+                    this.startBtn.disabled = true;
+                    this.pauseBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
+                    this.playSound(600, 100);
+                    
+                    // Restart the timer interval
+                    this.timer = setInterval(() => {
+                        const now = Date.now();
+                        const remaining = Math.max(0, Math.ceil((this.endTime - now) / 1000));
+                        
+                        if (remaining !== this.timeLeft) {
+                            this.timeLeft = remaining;
+                            this.updateTimerDisplay();
+                            this.updateTimerCircle();
+                        }
+                        
+                        if (this.timeLeft <= 0) {
+                            this.timerComplete();
+                        }
+                    }, 100);
+                } else {
+                    // Pause
+                    clearInterval(this.timer);
+                    this.pauseStartTime = Date.now();
+                    this.isPaused = true;
+                    this.isRunning = false;
+                    this.startBtn.disabled = false;
+                    this.pauseBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Resume';
+                    this.playSound(400, 100);
+                }
+            }
+
+            resetTimer() {
+                clearInterval(this.timer);
+                this.isRunning = false;
+                this.isPaused = false;
+                this.timeLeft = this.totalSeconds;
+                this.startTime = null;
+                this.endTime = null;
+                this.pausedTime = 0;
+                this.pauseStartTime = null;
+                
+                this.updateTimerDisplay();
+                this.updateTimerCircle();
+                
+                this.startBtn.disabled = this.totalSeconds === 0;
+                this.pauseBtn.disabled = true;
+                this.resetBtn.disabled = true;
+                this.pauseBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
+            }
+
+            timerComplete() {
+                clearInterval(this.timer);
+                this.isRunning = false;
+                
+                const sessionMinutes = Math.floor(this.totalSeconds / 60);
+                
+                // Update stats
+                this.stats.totalMinutes += sessionMinutes;
+                this.stats.currentCycleMinutes += sessionMinutes;
+                this.stats.totalSessions++;
+                
+                // Check if cycle is complete (60 minutes)
+                if (this.stats.currentCycleMinutes >= 60) {
+                    this.completeCycle();
+                }
+                
+                this.saveStats();
+                this.updateDisplay();
+                
+                // Play completion sound
+                this.playCompletionSound();
+                
+                // Show completion message
+                this.showNotification('Session Complete!', `Great work! You completed ${sessionMinutes} minutes of focused writing.`);
+                
+                this.startBtn.disabled = true;
+                this.pauseBtn.disabled = true;
+                this.resetBtn.disabled = false;
+            }
+
+            completeCycle() {
+                this.stats.completedCycles++;
+                this.stats.currentCycleNumber++;
+                this.stats.currentCycleMinutes = Math.max(0, this.stats.currentCycleMinutes - 60);
+                
+                // Show cycle completion
+                this.showNotification('🎉 Cycle Complete!', `Congratulations! You've completed a full 60-minute writing cycle. Starting cycle ${this.stats.currentCycleNumber}.`);
+                
+                // Add visual effect
+                const cycleElements = document.querySelector('.main-container');
+                cycleElements.classList.add('cycle-complete');
+                setTimeout(() => {
+                    cycleElements.classList.remove('cycle-complete');
+                }, 800);
+                
+                // Play special completion sound
+                setTimeout(() => this.playSound(880, 200), 0);
+                setTimeout(() => this.playSound(1108, 200), 200);
+                setTimeout(() => this.playSound(1320, 300), 400);
+            }
+
+            playCompletionSound() {
+                if (!this.soundEnabled) return;
+                
+                // Play a pleasant completion melody
+                const notes = [523.25, 659.25, 783.99]; // C, E, G
+                notes.forEach((freq, index) => {
+                    setTimeout(() => {
+                        this.playSound(freq, 300, 'sine');
+                    }, index * 200);
+                });
+            }
+
+            updateTimerDisplay() {
+                const minutes = Math.floor(this.timeLeft / 60);
+                const seconds = Math.floor(this.timeLeft % 60);
+                this.timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+
+            updateTimerCircle() {
+                const elapsed = this.totalSeconds - this.timeLeft;
+                const progress = this.totalSeconds > 0 ? (elapsed / this.totalSeconds) * 100 : 0;
+                const circumference = 2 * Math.PI * 45;
+                const offset = circumference - (progress / 100) * circumference;
+                this.timerCircle.style.strokeDashoffset = offset;
+            }
+
+            updateDisplay() {
+                // Current cycle progress
+                const cycleProgress = Math.min(100, (this.stats.currentCycleMinutes / 60) * 100);
+                const remaining = Math.max(0, 60 - this.stats.currentCycleMinutes);
+                
+                this.cycleProgressBar.style.width = `${cycleProgress}%`;
+                this.cycleProgressText.textContent = `${this.stats.currentCycleMinutes} / 60 min`;
+                this.cycleRemaining.textContent = `${remaining} min remaining`;
+                this.currentCycle.textContent = this.stats.currentCycleNumber;
+                
+                // Total statistics
+                const totalHours = Math.floor(this.stats.totalMinutes / 60);
+                const totalMins = this.stats.totalMinutes % 60;
+                this.totalTime.textContent = `${totalHours}h ${totalMins}m`;
+                this.completedCycles.textContent = this.stats.completedCycles;
+                this.totalSessions.textContent = this.stats.totalSessions;
+            }
+
+            saveStats() {
+                localStorage.setItem('simpleWritingStats', JSON.stringify(this.stats));
+            }
+
+            showNotification(title, message) {
+                const notification = document.createElement('div');
+                notification.className = 'notification bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg shadow-lg max-w-sm';
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-check-circle text-xl mr-3"></i>
+                        <div>
+                            <h4 class="font-bold">${title}</h4>
+                            <p class="text-sm">${message}</p>
+                        </div>
+                    </div>
+                `;
+                
+                this.notificationArea.appendChild(notification);
+                
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 5000);
+                
+                // Browser notification if permission granted
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(title, { body: message });
+                } else if ('Notification' in window && Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            new Notification(title, { body: message });
+                        }
+                    });
+                }
+            }
+
+            toggleSound() {
+                this.soundEnabled = !this.soundEnabled;
+                localStorage.setItem('writingDrillSound', this.soundEnabled);
+                this.updateSoundIcon();
+                
+                if (this.soundEnabled) {
+                    this.playSound(600, 100);
+                }
+            }
+
+            updateSoundIcon() {
+                const icon = this.soundToggle.querySelector('i');
+                if (this.soundEnabled) {
+                    icon.className = 'fas fa-volume-up text-lg';
+                } else {
+                    icon.className = 'fas fa-volume-mute text-lg';
+                }
+            }
+
+            toggleTheme() {
+                const currentTheme = document.body.getAttribute('data-theme');
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                
+                document.body.setAttribute('data-theme', newTheme);
+                localStorage.setItem('writingDrillTheme', newTheme);
+                this.updateThemeIcon(newTheme);
+                
+                // Update timer buttons after theme change
+                this.timeBtns.forEach(btn => {
+                    if (btn.style.backgroundColor === 'rgb(55, 65, 81)' || btn.style.backgroundColor === '#374151') {
+                        // Keep selected button dark
+                        btn.style.backgroundColor = '#374151';
+                        btn.style.color = 'white';
+                    } else {
+                        // Update unselected buttons to theme
+                        btn.style.backgroundColor = 'var(--button-bg)';
+                        btn.style.color = 'var(--button-text)';
+                        btn.style.borderColor = 'var(--border-color)';
+                    }
+                });
+            }
+
+            updateThemeIcon(theme) {
+                const icon = this.themeToggle.querySelector('i');
+                if (theme === 'light') {
+                    icon.className = 'fas fa-moon text-lg';
+                } else {
+                    icon.className = 'fas fa-sun text-lg';
+                }
+            }
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new SimpleWritingDrill();
+        });
+    </script>
+</body>
+</html>
